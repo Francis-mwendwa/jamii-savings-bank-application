@@ -1,0 +1,8 @@
+environments:
+  - name: __APICTL_ENVIRONMENT__
+    configs:
+      endpoints:
+        production:
+          url: __BACKEND_URL__
+        sandbox:
+          url: __BACKEND_URL__
