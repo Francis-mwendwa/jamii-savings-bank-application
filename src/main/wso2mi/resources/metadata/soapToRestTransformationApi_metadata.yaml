@@ -1,0 +1,10 @@
+---
+key: "soapToRestTransformationApi-1.0.0"
+name : "soapToRestTransformationApi"
+displayName : "soapToRestTransformationApi"
+description: "soapToRestTransformationApi"
+version: "1.0.0"
+serviceUrl: "https://{MI_HOST}:{MI_PORT}/soaptoresttransformationapi"
+definitionType: "OAS3"
+securityType: "BASIC"
+mutualSSLEnabled: false

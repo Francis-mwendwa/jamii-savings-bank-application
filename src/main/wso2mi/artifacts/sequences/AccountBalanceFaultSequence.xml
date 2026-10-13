@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Catches DB-level failures (connection refused, SQL error, pool exhausted, ...) -->
+<sequence name="AccountBalanceFaultSequence" xmlns="http://ws.apache.org/ns/synapse">
+    <!-- Detail goes to the log only; never leak SQL/driver text to the client -->
+    <log level="custom">
+        <property name="event" value="ACCOUNT_BALANCE_DB_FAILURE"/>
+        <property name="requestId" expression="get-property('requestId')"/>
+        <property name="errorCode" expression="get-property('ERROR_CODE')"/>
+        <property name="errorMessage" expression="get-property('ERROR_MESSAGE')"/>
+    </log>
+    <property name="err.status" value="503" scope="default"/>
+    <property name="err.code" value="DB_ERROR" scope="default"/>
+    <property name="err.message" value="The account database is currently unavailable. Please retry later." scope="default"/>
+    <sequence key="ErrorResponseSequence"/>
+</sequence>

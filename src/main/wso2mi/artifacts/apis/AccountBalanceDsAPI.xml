@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Facade over the data service. A data service cannot emit 404s or a custom envelope,
+     so this thin API maps its result to the required contract.
+     NOTE: same context as AccountBalanceAPI - deploy only one of the two. -->
+<api context="/accounts" name="AccountBalanceDsAPI" xmlns="http://ws.apache.org/ns/synapse">
+    <resource methods="GET" uri-template="/{accountNumber}/balance" faultSequence="AccountBalanceFaultSequence">
+        <inSequence>
+            <property name="requestId" expression="substring-after(get-property(&apos;MessageID&apos;),&apos;urn:uuid:&apos;)" scope="default"/>
+            <property name="timestamp" expression='get-property("SYSTEM_DATE","yyyy-MM-dd&apos;T&apos;HH:mm:ss.SSSXXX")' scope="default"/>
+            <filter source="get-property(&apos;uri.var.accountNumber&apos;)" regex="^[A-Za-z0-9]{6,20}$">
+                <then>
+                    <dataServiceCall serviceName="AccountBalanceDS">
+                        <source type="inline"/>
+                        <operations type="single">
+                            <operation name="getAccountBalance">
+                                <param name="accountNumber" expression="get-property('uri.var.accountNumber')"/>
+                            </operation>
+                        </operations>
+                        <target type="body"/>
+                    </dataServiceCall>
+
+
+                    <property name="db_account" expression="string(//*[local-name()=&apos;accountNumber&apos;])" scope="default"/>
+                    <property name="db_status" expression="string(//*[local-name()=&apos;status&apos;])" scope="default"/>
+                    <property name="db_amount" expression="string(//*[local-name()=&apos;amount&apos;])" scope="default"/>
+                    <property name="db_currency" expression="string(//*[local-name()=&apos;currency&apos;])" scope="default"/>
+
+
+                    <filter xpath="string-length(get-property(&apos;db_account&apos;)) = 0">
+                        <then>
+                            <property name="err.status" value="404" scope="default"/>
+                            <property name="err.code" value="ACCOUNT_NOT_FOUND" scope="default"/>
+                            <property name="err.message" value="No account exists for the supplied account number." scope="default"/>
+                            <sequence key="ErrorResponseSequence"/>
+                        </then>
+                        <else>
+                            <payloadFactory media-type="json">
+                                <format>{"accountNumber":"$1","status":"$2","balance":{"amount":$3,"currency":"$4"},"requestId":"$5","timestamp":"$6"}</format>
+                                <args>
+                                    <arg evaluator="xml" expression="get-property(&apos;db_account&apos;)"/>
+                                    <arg evaluator="xml" expression="get-property(&apos;db_status&apos;)"/>
+                                    <arg evaluator="xml" expression="get-property(&apos;db_amount&apos;)"/>
+                                    <arg evaluator="xml" expression="get-property(&apos;db_currency&apos;)"/>
+                                    <arg evaluator="xml" expression="get-property(&apos;requestId&apos;)"/>
+                                    <arg evaluator="xml" expression="get-property(&apos;timestamp&apos;)"/>
+                                </args>
+                            </payloadFactory>
+                            <property name="HTTP_SC" value="200" scope="axis2"/>
+                            <property name="messageType" value="application/json" scope="axis2"/>
+                            <respond/>
+                        </else>
+                    </filter>
+                </then>
+                <else>
+                    <property name="err.status" value="400" scope="default"/>
+                    <property name="err.code" value="INVALID_ACCOUNT_NUMBER" scope="default"/>
+                    <property name="err.message" value="Account number must be 6-20 alphanumeric characters." scope="default"/>
+                    <sequence key="ErrorResponseSequence"/>
+                </else>
+            </filter>
+        </inSequence>
+        <outSequence/>
+    </resource>
+</api>

@@ -1,0 +1,77 @@
+﻿openapi: 3.0.1
+info:
+  title: AccountBalanceAPi
+  description: Database-backed account balance lookup
+  version: 1.0.0
+servers:
+  - url: http://localhost:8290/accountbalanceapi
+  - url: https://localhost:8253/accountbalanceapi
+paths:
+  /accounts/{accountNumber}/balance:
+    get:
+      parameters:
+        - name: accountNumber
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Account balance
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [accountNumber, status, balance, requestId, timestamp]
+                properties:
+                  accountNumber:
+                    type: string
+                  status:
+                    type: string
+                    enum: [ACTIVE, DORMANT, CLOSED]
+                  balance:
+                    type: object
+                    required: [amount, currency]
+                    properties:
+                      amount:
+                        type: number
+                        format: double
+                      currency:
+                        type: string
+                        example: KES
+                  requestId:
+                    type: string
+                    format: uuid
+                  timestamp:
+                    type: string
+                    format: date-time
+        '404':
+          description: Account not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Database lookup failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+components:
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, requestId]
+          properties:
+            code:
+              type: string
+              enum: [ACCOUNT_NOT_FOUND, ACCOUNT_DATABASE_ERROR]
+            message:
+              type: string
+            requestId:
+              type: string
+              format: uuid

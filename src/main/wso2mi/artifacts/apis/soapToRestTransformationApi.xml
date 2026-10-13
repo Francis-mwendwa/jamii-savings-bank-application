@@ -1,0 +1,112 @@
+
+<!-- <?xml version="1.0" encoding="UTF-8"/> -->
+<api xmlns="http://ws.apache.org/ns/synapse"
+     name="CustomerAPI"
+     context="/customers">
+
+    <resource methods="GET" uri-template="/{customerId}">
+        <inSequence>
+
+            <!-- Capture the path variable -->
+            <property name="customerId"
+                      expression="get-property('uri.var.customerId')"
+                      scope="default"
+                      type="STRING"/>
+
+            <!-- Preserve a supplied correlation ID -->
+            <property name="correlationId"
+                      expression="get-property('transport','X-Correlation-ID')"
+                      scope="default"
+                      type="STRING"/>
+
+            <!-- Generate a fallback from MI's message ID -->
+            <filter xpath="string-length(normalize-space($ctx:correlationId)) = 0">
+                <then>
+                    <property name="correlationId"
+                              expression="get-property('MessageID')"
+                              scope="default"
+                              type="STRING"/>
+                </then>
+            </filter>
+
+            <!-- Add correlation ID to the outbound request -->
+            <property name="X-Correlation-ID"
+                      expression="$ctx:correlationId"
+                      scope="transport"
+                      type="STRING"/>
+
+            <!-- Remove internal-only headers -->
+            <property name="X-Internal-Token"
+                      action="remove"
+                      scope="transport"/>
+            <property name="X-Internal-User"
+                      action="remove"
+                      scope="transport"/>
+            <property name="X-Debug"
+                      action="remove"
+                      scope="transport"/>
+
+            <!-- Log metadata, not the complete customer payload -->
+            <log level="custom">
+                <property name="event" value="customer_proxy_request"/>
+                <property name="customerId" expression="$ctx:customerId"/>
+                <property name="correlationId" expression="$ctx:correlationId"/>
+            </log>
+
+            <!-- Call the public mock REST backend -->
+            <call>
+                <endpoint>
+                    <http method="get"
+                          uri-template="https://jsonplaceholder.typicode.com/users/{uri.var.customerId}">
+                        <timeout>
+                            <duration>5000</duration>
+                            <responseAction>fault</responseAction>
+                        </timeout>
+                    </http>
+                </endpoint>
+            </call>
+
+            <!-- Read the backend HTTP status -->
+            <property name="backendStatus"
+                      expression="get-property('axis2','HTTP_SC')"
+                      scope="default"
+                      type="STRING"/>
+
+            <!-- Normalize a missing customer -->
+            <filter source="$ctx:backendStatus" regex="404">
+                <then>
+                    <property name="HTTP_SC" value="404" scope="axis2"/>
+                    <property name="messageType" value="application/json" scope="axis2"/>
+                    <payloadFactory media-type="json">
+                        <format>
+                            {
+                              "success": false,
+                              "message": "Customer not found",
+                              "data": null,
+                              "error": {
+                                "code": "RESOURCE_NOT_FOUND",
+                                "details": "No customer exists for the supplied ID"
+                              }
+                            }
+                        </format>
+                        <args/>
+                    </payloadFactory>
+                </then>
+            </filter>
+
+            <!-- Restore correlation ID on the response -->
+            <property name="X-Correlation-ID"
+                      expression="$ctx:correlationId"
+                      scope="transport"
+                      type="STRING"/>
+
+            <log level="custom">
+                <property name="event" value="customer_proxy_response"/>
+                <property name="correlationId" expression="$ctx:correlationId"/>
+                <property name="backendStatus" expression="$ctx:backendStatus"/>
+            </log>
+
+            <respond/>
+        </inSequence>
+    </resource>
+</api>

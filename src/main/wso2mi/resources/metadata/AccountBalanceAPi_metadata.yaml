@@ -1,0 +1,10 @@
+---
+key: "AccountBalanceAPi-1.0.0"
+name : "AccountBalanceAPi"
+displayName : "AccountBalanceAPi"
+description: "AccountBalanceAPi"
+version: "1.0.0"
+serviceUrl: "https://{MI_HOST}:{MI_PORT}/accountbalanceapi"
+definitionType: "OAS3"
+securityType: "BASIC"
+mutualSSLEnabled: false

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<data enableBatchRequests="false" name="AccountBalanceDS" serviceNamespace="http://ws.wso2.org/dataservice" serviceGroup="" transports="http https">
+    <description>Account balance lookup against the ACCOUNTS table (H2)</description>
+
+    <!-- Uses the datasource declared in deployment.toml -->
+    <!-- <config enableOData="false" id="default">
+        <property name="carbon_datasource_name">AccountsDS</property>
+    </config> -->
+
+    <config id="AccountsDS">
+        <property name="driverClassName">org.h2.Driver</property>
+        <property name="url">jdbc:h2:file:./repository/database/ACCOUNTSDB;AUTO_SERVER=TRUE;INIT=RUNSCRIPT FROM 'D:/WSO2/MI/family-bank-assessment/db/schema.sql'\;RUNSCRIPT FROM 'D:/WSO2/MI/family-bank-assessment/db/seed.sql'</property>
+        <property name="username">sa</property>
+        <property name="password"></property>
+    </config>
+
+    <!-- Parameterized query: accountNumber is bound to the ? placeholder -->
+    <query id="getAccountBalanceQuery" useConfig="AccountsDS">
+        <sql>SELECT ACCOUNT_NUMBER, STATUS, BALANCE, CURRENCY FROM ACCOUNTS WHERE ACCOUNT_NUMBER = ?</sql>
+        <param name="accountNumber" ordinal="1" sqlType="STRING" type="IN">
+            <validateLength minimum="6" maximum="20"/>
+        </param>
+        <result element="accounts" rowName="account">
+            <element column="ACCOUNT_NUMBER" name="accountNumber" xsdType="string"/>
+            <element column="STATUS" name="status" xsdType="string"/>
+            <element column="BALANCE" name="amount" xsdType="decimal"/>
+            <element column="CURRENCY" name="currency" xsdType="string"/>
+        </result>
+    </query>
+
+    <!-- SOAP operation -->
+    <operation name="getAccountBalance">
+        <call-query href="getAccountBalanceQuery">
+            <with-param name="accountNumber" query-param="accountNumber"/>
+        </call-query>
+    </operation>
+
+    <!-- REST resource: GET /services/AccountBalanceDS/accounts/{accountNumber} -->
+    <resource method="GET" path="accounts/{accountNumber}">
+        <call-query href="getAccountBalanceQuery">
+            <with-param name="accountNumber" query-param="accountNumber"/>
+        </call-query>
+    </resource>
+</data>

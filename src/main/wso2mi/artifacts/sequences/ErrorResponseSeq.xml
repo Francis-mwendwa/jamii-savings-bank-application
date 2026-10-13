@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Save as TWO files in src/main/wso2mi/artifacts/sequences/ :
+     ErrorResponseSeq.xml  and  EligibilityFaultSeq.xml
+     ErrorResponseSeq is the single error shape: reuse it from all three APIs. -->
+
+<!-- ===== ErrorResponseSeq.xml ===== -->
+<sequence name="ErrorResponseSeq" xmlns="http://ws.apache.org/ns/synapse">
+    <payloadFactory media-type="json">
+        <format>{"error":{"code":"$1","message":"$2","traceId":"$3"}}</format>
+        <args>
+            <arg evaluator="xml" expression="$ctx:errCode"/>
+            <arg evaluator="xml" expression="$ctx:errMsg"/>
+            <arg evaluator="xml" expression="$ctx:traceId"/>
+        </args>
+    </payloadFactory>
+    <property name="HTTP_SC" expression="$ctx:httpStatus" scope="axis2"/>
+    <property name="messageType" value="application/json" scope="axis2"/>
+    <log level="custom">
+        <property name="event" value="RESPONSE_OUT error"/>
+        <property name="traceId" expression="$ctx:traceId"/>
+        <property name="status" expression="$ctx:httpStatus"/>
+        <property name="code" expression="$ctx:errCode"/>
+    </log>
+    <respond/>
+</sequence>

@@ -1,0 +1,203 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<api context="/loans" name="LoanEligibilityAPI" xmlns="http://ws.apache.org/ns/synapse">
+  <resource methods="POST" uri-template="/eligibility">
+    <inSequence>
+      <property name="CORR_ID" expression="get-property('MessageID')"/>
+
+      <!-- Extract fields (never log the raw payload) -->
+      <property name="inCust" expression="json-eval($.customerId)"/>
+      <property name="inIncome" expression="json-eval($.annualIncome)"/>
+      <property name="inAmount" expression="json-eval($.requestedAmount)"/>
+      <property name="inTerm" expression="json-eval($.termMonths)"/>
+      <!-- Mask PII: keep last 2 chars only -->
+      <property name="maskedCust" expression="concat('****', substring($ctx:inCust, string-length($ctx:inCust) - 1))"/>
+
+      <log level="custom" category="INFO">
+        <property name="event" value="REQUEST_IN"/>
+        <property name="api" value="POST /loans/eligibility"/>
+        <property name="correlationId" expression="$ctx:CORR_ID"/>
+        <property name="customerId" expression="$ctx:maskedCust"/>
+        <property name="requestedAmount" expression="$ctx:inAmount"/>
+        <property name="termMonths" expression="$ctx:inTerm"/>
+      </log>
+
+      <!-- Validation: any failure => 400 -->
+      <filter source="$ctx:inCust" regex="^[A-Za-z0-9-]{3,20}$">
+        <then/>
+        <else>
+          <property name="ERR_STATUS" value="400"/>
+          <property name="ERR_CODE" value="400001"/>
+          <property name="ERR_MESSAGE" value="customerId is required (3-20 alphanumeric characters)."/>
+          <sequence key="common_error_seq"/>
+        </else>
+      </filter>
+      <filter source="$ctx:inIncome" regex="^[1-9][0-9]{0,7}$">
+        <then/>
+        <else>
+          <property name="ERR_STATUS" value="400"/>
+          <property name="ERR_CODE" value="400001"/>
+          <property name="ERR_MESSAGE" value="annualIncome must be a positive whole number."/>
+          <sequence key="common_error_seq"/>
+        </else>
+      </filter>
+      <filter source="$ctx:inAmount" regex="^[1-9][0-9]{0,7}$">
+        <then/>
+        <else>
+          <property name="ERR_STATUS" value="400"/>
+          <property name="ERR_CODE" value="400001"/>
+          <property name="ERR_MESSAGE" value="requestedAmount must be a positive whole number."/>
+          <sequence key="common_error_seq"/>
+        </else>
+      </filter>
+      <filter source="$ctx:inTerm" regex="^[1-9][0-9]{0,2}$">
+        <then/>
+        <else>
+          <property name="ERR_STATUS" value="400"/>
+          <property name="ERR_CODE" value="INVALID_REQUEST"/>
+          <property name="ERR_MESSAGE" value="termMonths must be a positive whole number."/>
+          <sequence key="common_error_seq"/>
+        </else>
+      </filter>
+
+      <!-- Business rule input: max loan = 4x annual income -->
+      <property name="maxAmt" expression="string(number($ctx:inIncome) * 4)"/>
+
+      <!-- REST -> SOAP -->
+      <payloadFactory media-type="xml">
+        <format>
+          <tem:Divide xmlns:tem="http://tempuri.org/">
+            <tem:intA>$1</tem:intA>
+            <tem:intB>$2</tem:intB>
+          </tem:Divide>
+        </format>
+        <args>
+          <arg evaluator="xml" expression="$ctx:maxAmt"/>
+          <arg evaluator="xml" expression="$ctx:inAmount"/>
+        </args>
+      </payloadFactory>
+      <!-- Without this, "/eligibility" gets appended to the SOAP endpoint URL -->
+      <property name="REST_URL_POSTFIX" scope="axis2" action="remove"/>
+      <property name="messageType" value="text/xml" scope="axis2"/>
+      <header name="Accept-Encoding" scope="transport" value="identity"/>
+      <header name="Action" scope="default" value="http://tempuri.org/Divide"/>
+
+      <log level="custom" category="INFO">
+        <property name="event" value="BACKEND_CALL"/>
+        <property name="correlationId" expression="$ctx:CORR_ID"/>
+        <property name="target" value="CalculatorSoapEP / Divide"/>
+        <property name="customerId" expression="$ctx:maskedCust"/>
+      </log>
+      <log level="full"/>
+      <call>
+        <endpoint key="CalculatorSoapEP"/>
+      </call>
+
+      <!-- SOAP Fault => REST error (raw fault is logged server-side only) -->
+      <filter xpath="boolean($body/*[local-name()='Fault'])">
+        <then>
+          <property name="faultCode" expression="$body//*[local-name()='faultcode']"/>
+          <property name="faultString" expression="$body//*[local-name()='faultstring']"/>
+          <log level="custom" category="ERROR">
+            <property name="event" value="BACKEND_SOAP_FAULT"/>
+            <property name="correlationId" expression="$ctx:CORR_ID"/>
+            <property name="faultCode" expression="$ctx:faultCode"/>
+            <property name="faultString" expression="$ctx:faultString"/>
+          </log>
+          <property name="ERR_STATUS" value="500"/>
+          <property name="ERR_CODE" value="500001"/>
+          <property name="ERR_MESSAGE" value="The eligibility service could not process the request."/>
+          <sequence key="common_error_seq"/>
+        </then>
+        <else/>
+      </filter>
+
+      <!-- SOAP -> JSON -->
+      <property name="ratio" expression="string($body//*[local-name()='DivideResult'])"/>
+      <filter source="$ctx:ratio" regex="^-?[0-9]+$">
+        <then/>
+        <else>
+          <property name="ERR_STATUS" value="502"/>
+          <property name="ERR_CODE" value="BACKEND_BAD_RESPONSE"/>
+          <property name="ERR_MESSAGE" value="The eligibility service returned an unexpected response."/>
+          <sequence key="common_error_seq"/>
+        </else>
+      </filter>
+      <filter xpath="$ctx:ratio &gt;= 1">
+        <then>
+          <property name="ELIGIBLE" value="true"/>
+          <property name="DECISION" value="ELIGIBLE"/>
+          <property name="REASON" value="Requested amount is within 4x annual income."/>
+        </then>
+        <else>
+          <property name="ELIGIBLE" value="false"/>
+          <property name="DECISION" value="NOT_ELIGIBLE"/>
+          <property name="REASON" value="Requested amount exceeds 4x annual income."/>
+        </else>
+      </filter>
+      <payloadFactory media-type="json">
+        <format>{"eligible":$1,"decision":"$2","reason":"$3","requestedAmount":$4,"maxEligibleAmount":$5,"coverageRatio":$6,"correlationId":"$7"}</format>
+        <args>
+          <arg evaluator="xml" expression="$ctx:ELIGIBLE"/>
+          <arg evaluator="xml" expression="$ctx:DECISION"/>
+          <arg evaluator="xml" expression="$ctx:REASON"/>
+          <arg evaluator="xml" expression="$ctx:inAmount"/>
+          <arg evaluator="xml" expression="$ctx:maxAmt"/>
+          <arg evaluator="xml" expression="$ctx:ratio"/>
+          <arg evaluator="xml" expression="$ctx:CORR_ID"/>
+        </args>
+      </payloadFactory>
+      <log level="custom" category="INFO">
+        <property name="event" value="RESPONSE_OUT"/>
+        <property name="correlationId" expression="$ctx:CORR_ID"/>
+        <property name="status" value="200"/>
+        <property name="decision" expression="$ctx:DECISION"/>
+        <property name="customerId" expression="$ctx:maskedCust"/>
+      </log>
+      <property name="HTTP_SC" value="200" scope="axis2"/>
+      <property name="messageType" value="application/json" scope="axis2"/>
+      <respond/>
+    </inSequence>
+
+    <!-- Transport errors, timeouts, malformed JSON that blows up the builder, anything unexpected -->
+    <faultSequence>
+      <log level="custom" category="ERROR">
+        <property name="event" value="UNHANDLED_ERROR"/>
+        <property name="correlationId" expression="$ctx:CORR_ID"/>
+        <property name="errorCode" expression="$ctx:ERROR_CODE"/>
+        <property name="errorMessage" expression="$ctx:ERROR_MESSAGE"/>
+      </log>
+      <switch source="$ctx:ERROR_CODE">
+        <case regex="303001">
+          <property name="ERR_STATUS" value="400"/>
+          <property name="ERR_CODE" value="INVALID_REQUEST"/>
+          <property name="ERR_MESSAGE" value="Request body is not valid JSON."/>
+        </case>
+        <case regex="101504|101508">
+          <property name="ERR_STATUS" value="504"/>
+          <property name="ERR_CODE" value="BACKEND_TIMEOUT"/>
+          <property name="ERR_MESSAGE" value="The eligibility service timed out."/>
+        </case>
+        <case regex="1015\d\d">
+          <property name="ERR_STATUS" value="502"/>
+          <property name="ERR_CODE" value="BACKEND_UNAVAILABLE"/>
+          <property name="ERR_MESSAGE" value="The eligibility service is unavailable."/>
+        </case>
+        <default>
+          <filter source="$ctx:ERROR_MESSAGE" regex="(?is).*(json|unexpected character|building).*">
+            <then>
+              <property name="ERR_STATUS" value="400"/>
+              <property name="ERR_CODE" value="INVALID_REQUEST"/>
+              <property name="ERR_MESSAGE" value="Request body is not valid JSON."/>
+            </then>
+            <else>
+              <property name="ERR_STATUS" value="500"/>
+              <property name="ERR_CODE" value="INTERNAL_ERROR"/>
+              <property name="ERR_MESSAGE" value="An unexpected error occurred."/>
+            </else>
+          </filter>
+        </default>
+      </switch>
+      <sequence key="common_error_seq"/>
+    </faultSequence>
+  </resource>
+</api>

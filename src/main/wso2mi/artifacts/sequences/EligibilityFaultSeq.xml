@@ -1,0 +1,39 @@
+<!-- ===== EligibilityFaultSeq.xml ===== -->
+<sequence name="EligibilityFaultSeq" xmlns="http://ws.apache.org/ns/synapse">
+    <log level="custom">
+        <property name="event" value="FAULT_SEQUENCE"/>
+        <property name="traceId" expression="$ctx:traceId"/>
+        <property name="stage" expression="$ctx:STAGE"/>
+        <property name="ERROR_CODE" expression="get-property('ERROR_CODE')"/>
+        <property name="ERROR_MESSAGE" expression="get-property('ERROR_MESSAGE')"/>
+    </log>
+    <switch source="$ctx:STAGE">
+        <!-- malformed JSON that blew up before/during validation -> 400, not 500 -->
+        <case regex="VALIDATION">
+            <property name="httpStatus" value="400" scope="default" type="STRING"/>
+            <property name="errCode" value="INVALID_REQUEST" scope="default" type="STRING"/>
+            <property name="errMsg" value="Request body is malformed or invalid." scope="default" type="STRING"/>
+        </case>
+        <case regex="BACKEND">
+            <!-- timeout codes: confirm against the MI error-code table for your version -->
+            <filter xpath="get-property('ERROR_CODE') = '101504' or get-property('ERROR_CODE') = '101505'">
+                <then>
+                    <property name="httpStatus" value="504" scope="default" type="STRING"/>
+                    <property name="errCode" value="UPSTREAM_TIMEOUT" scope="default" type="STRING"/>
+                    <property name="errMsg" value="The eligibility service timed out." scope="default" type="STRING"/>
+                </then>
+                <else>
+                    <property name="httpStatus" value="502" scope="default" type="STRING"/>
+                    <property name="errCode" value="UPSTREAM_ERROR" scope="default" type="STRING"/>
+                    <property name="errMsg" value="The eligibility service is unavailable." scope="default" type="STRING"/>
+                </else>
+            </filter>
+        </case>
+        <default>
+            <property name="httpStatus" value="500" scope="default" type="STRING"/>
+            <property name="errCode" value="INTERNAL_ERROR" scope="default" type="STRING"/>
+            <property name="errMsg" value="An unexpected error occurred." scope="default" type="STRING"/>
+        </default>
+    </switch>
+    <sequence key="ErrorResponseSeq"/>
+</sequence>

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Shared by ALL APIs. Caller sets ERR_STATUS, ERR_CODE, ERR_MESSAGE (and CORR_ID). -->
+<sequence name="common_error_seq" xmlns="http://ws.apache.org/ns/synapse">
+  <log level="custom" category="WARN">
+    <property name="event" value="RESPONSE_OUT"/>
+    <property name="correlationId" expression="$ctx:CORR_ID"/>
+    <property name="status" expression="$ctx:ERR_STATUS"/>
+    <property name="errorCode" expression="$ctx:ERR_CODE"/>
+  </log>
+  <payloadFactory media-type="json">
+    <format>{"error":{"code":"$1","message":"$2","status":$3,"correlationId":"$4","timestamp":"$5"}}</format>
+    <args>
+      <arg evaluator="xml" expression="$ctx:ERR_CODE"/>
+      <arg evaluator="xml" expression="$ctx:ERR_MESSAGE"/>
+      <arg evaluator="xml" expression="$ctx:ERR_STATUS"/>
+      <arg evaluator="xml" expression="$ctx:CORR_ID"/>
+      <arg evaluator="xml" expression="get-property('SYSTEM_DATE','yyyy-MM-dd HH:mm:ssZ')"/>
+    </args>
+  </payloadFactory>
+  <property name="HTTP_SC" expression="$ctx:ERR_STATUS" scope="axis2"/>
+  <property name="messageType" value="application/json" scope="axis2"/>
+  <respond/>
+</sequence>

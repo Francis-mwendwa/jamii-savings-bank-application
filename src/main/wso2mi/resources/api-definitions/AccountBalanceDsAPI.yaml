@@ -1,0 +1,20 @@
+openapi: 3.0.1
+info:
+  title: AccountBalanceDsAPI
+  description: API Definition of AccountBalanceDsAPI
+  version: 1.0.0
+servers:
+- url: http://localhost:8290/accounts
+- url: https://localhost:8253/accounts
+paths:
+  /{accountNumber}/balance:
+    get:
+      parameters:
+      - name: accountNumber
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        default:
+          description: Default response

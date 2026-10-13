@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<proxy name="CustomerInfoProxy" startOnLoad="true" transports="http https"
+    xmlns="http://ws.apache.org/ns/synapse">
+    <target>
+        <inSequence>
+        </inSequence>
+        <faultSequence />
+    </target>
+</proxy>
