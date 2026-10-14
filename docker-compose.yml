@@ -1,0 +1,29 @@
+services:
+  mi:
+    build:
+      context: .
+      dockerfile: deployment/docker/Dockerfile.compose
+      args:
+        BASE_IMAGE: ${MI_BASE_IMAGE:-wso2/wso2mi:4.6.0}
+    image: family-bank-mi:local
+    ports:
+      - "8290:8290"   # MI HTTP APIs
+      - "8253:8253"   # MI HTTPS APIs
+      - "9164:9164"   # MI management API
+    volumes:
+      - mi-database:/home/wso2carbon/wso2mi-4.6.0/repository/database
+    restart: unless-stopped
+
+  apim:
+    image: ${APIM_IMAGE:-wso2/wso2am:4.6.0}
+    ports:
+      - "9443:9443"   # Publisher and Developer Portal
+      - "8243:8243"   # HTTPS gateway
+      - "8280:8280"   # HTTP gateway
+    volumes:
+      - apim-database:/home/wso2carbon/wso2am-4.6.0/repository/database
+    restart: unless-stopped
+
+volumes:
+  mi-database:
+  apim-database:

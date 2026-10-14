@@ -1,0 +1,14 @@
+FROM maven:3.9.9-eclipse-temurin-21 AS build
+WORKDIR /workspace
+COPY . .
+RUN mvn -B clean install
+
+ARG BASE_IMAGE=wso2/wso2mi:4.6.0
+FROM ${BASE_IMAGE}
+
+COPY --from=build /workspace/target/family-bank-assessment_1.0.0.car ${WSO2_SERVER_HOME}/repository/deployment/server/carbonapps/
+COPY --from=build /workspace/db/schema.sql ${WSO2_SERVER_HOME}/repository/database/accounts-schema.sql
+COPY --from=build /workspace/db/seed.sql ${WSO2_SERVER_HOME}/repository/database/accounts-seed.sql
+COPY --from=build /workspace/deployment/libs/h2-2.5.252.jar ${WSO2_SERVER_HOME}/lib/
+COPY deployment/docker/resources/wso2carbon.jks ${WSO2_SERVER_HOME}/repository/resources/security/wso2carbon.jks
+COPY deployment/docker/resources/client-truststore.jks ${WSO2_SERVER_HOME}/repository/resources/security/client-truststore.jks

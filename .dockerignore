@@ -1,0 +1,7 @@
+.git
+.vscode
+.env
+target/
+**/target/
+**/*.log
+deployment/libs/*.jar
