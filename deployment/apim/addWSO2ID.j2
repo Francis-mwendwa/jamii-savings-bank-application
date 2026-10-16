@@ -1,0 +1,7 @@
+<sequence xmlns="http://ws.apache.org/ns/synapse" name="jamii-apim-id-generator">
+    <log level="custom">
+        <property action="set" name="apimID" expression="$ctx:api.ut.userName" scope="transport" />
+    </log>
+    <!-- Retrieve user details -->
+    <property action="set" name="apimID" expression="$ctx:api.ut.userName" scope="transport" />
+</sequence>S
